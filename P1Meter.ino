@@ -5,7 +5,6 @@
 #include <ESP8266HTTPClient.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
-#include "CRC16.h"
 
 //===Change values from here===
 const char* ssid = "WIFISSID";
@@ -34,8 +33,6 @@ char telegram[MAXLINELENGTH];
 
 #define SERIAL_RX     D5  // pin for SoftwareSerial RX
 SoftwareSerial mySerial(SERIAL_RX, -1, true, MAXLINELENGTH); // (RX, TX. inverted, buffer)
-
-unsigned int currentCRC=0;
 
 void SendToDomoLog(char* message)
 {
@@ -187,47 +184,9 @@ bool decodeTelegram(int len) {
   //need to check for start
   int startChar = FindCharInArrayRev(telegram, '/', len);
   int endChar = FindCharInArrayRev(telegram, '!', len);
-  bool validCRCFound = false;
-  if(startChar>=0)
-  {
-    //start found. Reset CRC calculation
-    currentCRC=CRC16(0x0000,(unsigned char *) telegram+startChar, len-startChar);
-    if(outputOnSerial)
-    {
-      for(int cnt=startChar; cnt<len-startChar;cnt++)
-        Serial.print(telegram[cnt]);
-    }    
-    //Serial.println("Start found!");
-    
-  }
-  else if(endChar>=0)
-  {
-    //add to crc calc 
-    currentCRC=CRC16(currentCRC,(unsigned char*)telegram+endChar, 1);
-    char messageCRC[5];
-    strncpy(messageCRC, telegram + endChar + 1, 4);
-    messageCRC[4]=0; //thanks to HarmOtten (issue 5)
-    if(outputOnSerial)
-    {
-      for(int cnt=0; cnt<len;cnt++)
-        Serial.print(telegram[cnt]);
-    }    
-    validCRCFound = (strtol(messageCRC, NULL, 16) == currentCRC);
-    if(validCRCFound)
-      Serial.println("\nVALID CRC FOUND!"); 
-    else
-      Serial.println("\n===INVALID CRC FOUND!===");
-    currentCRC = 0;
-  }
-  else
-  {
-    currentCRC=CRC16(currentCRC, (unsigned char*)telegram, len);
-    if(outputOnSerial)
-    {
-      for(int cnt=0; cnt<len;cnt++)
-        Serial.print(telegram[cnt]);
-    }
-  }
+  bool endOfMessage = false;
+  if(endChar>=0)
+    endOfMessage = true;
 
   long val =0;
   long val2=0;
@@ -270,7 +229,7 @@ bool decodeTelegram(int len) {
   if (strncmp(telegram, "0-1:24.2.1", strlen("0-1:24.2.1")) == 0) 
     mGAS = getValue(telegram, len);
 
-  return validCRCFound;
+  return endOfMessage;
 }
 
 void readTelegram() {
